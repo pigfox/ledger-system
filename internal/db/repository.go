@@ -109,34 +109,18 @@ func ProcessTransfer(req TransferRequest) (string, error) {
 	txID := uuid.New().String()
 
 	// Start transaction
-	tx, err := Conn.DB.Begin()
+	dbTx, err := Conn.DB.Begin()
 	if err != nil {
 		return "", err
 	}
-	defer func() {
-		if p := recover(); p != nil {
-			err := tx.Rollback()
-			if err != nil {
-				log.Printf("Error rolling back transaction: %v", err)
-				return
-			}
-			panic(p) // re-throw panic after Rollback
-		} else if err != nil {
-			err := tx.Rollback()
-			if err != nil {
-				log.Printf("Error rolling back transaction: %v", err)
-				return
-			}
-		} else {
-			err = tx.Commit()
-		}
-	}()
 
-	// Insert into transactions
-	_, err = tx.Exec(`INSERT INTO transactions (id, user_id, type, amount, currency, status)
-		VALUES ($1, $2, 'transfer', $3, $4, 'completed')`,
-		txID, req.FromUserID, req.Amount, req.Currency)
+	// Insert transaction record
+	_, err = dbTx.Exec(`
+		INSERT INTO transactions (id, user_id, type, amount, currency, status)
+		VALUES ($1, $2, 'transfer', $3, $4, 'completed')
+	`, txID, req.FromUserID, req.Amount, req.Currency)
 	if err != nil {
+		dbTx.Rollback()
 		return "", err
 	}
 
@@ -144,12 +128,19 @@ func ProcessTransfer(req TransferRequest) (string, error) {
 	to := fmt.Sprintf("user:%d", req.ToUserID)
 
 	// Insert debit ledger entry
-	if err = insertLedgerEntryTx(tx, txID, from, req.Currency, req.Amount, "debit"); err != nil {
+	if err = insertLedgerEntryTx(dbTx, txID, from, req.Currency, req.Amount, "debit"); err != nil {
+		dbTx.Rollback()
 		return "", err
 	}
 
 	// Insert credit ledger entry
-	if err = insertLedgerEntryTx(tx, txID, to, req.Currency, req.Amount, "credit"); err != nil {
+	if err = insertLedgerEntryTx(dbTx, txID, to, req.Currency, req.Amount, "credit"); err != nil {
+		dbTx.Rollback()
+		return "", err
+	}
+
+	// Commit transaction
+	if err = dbTx.Commit(); err != nil {
 		return "", err
 	}
 

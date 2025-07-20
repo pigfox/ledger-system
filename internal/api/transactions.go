@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"ledger-system/internal/db"
 	"net/http"
 )
@@ -55,10 +54,6 @@ func Withdraw(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	fmt.Println("balance.Amount", balance.Amount)
-	fmt.Println("balance.Currency", balance.Currency)
-	fmt.Println("tx.Amount", tx.Amount)
 
 	if tx.Amount > balance.Amount {
 		http.Error(w, "Insufficient balance", http.StatusBadRequest)
