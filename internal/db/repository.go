@@ -35,7 +35,6 @@ func Connect() Connection {
 	return Conn
 }
 
-// USERS
 func CreateUser(u User) (User, error) {
 	row := Conn.DB.QueryRow(`INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id`, u.Name, u.Email)
 	err := row.Scan(&u.ID)
@@ -48,45 +47,39 @@ func AddUserAddress(a UserAddress) error {
 	return err
 }
 
-// BALANCE
-func GetUserBalances(userID string) ([]Balance, error) {
+func GetUserBalances(userID int, currency string) (Balance, error) {
 	query := `
-	SELECT currency, SUM(CASE direction WHEN 'credit' THEN amount ELSE -amount END) as amount
-	FROM ledger_entries
-	JOIN transactions ON transactions.id = ledger_entries.transaction_id
-	WHERE transactions.user_id = $1
-	GROUP BY currency`
-	rows, err := Conn.DB.Query(query, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			log.Printf("Error closing rows: %v", err)
-		}
-	}(rows)
+		SELECT currency,
+		       SUM(CASE
+		             WHEN direction = 'credit' THEN amount
+		             WHEN direction = 'debit' THEN -amount
+		           END) AS amount
+		FROM ledger_entries
+		WHERE account = $1 AND currency = $2
+		GROUP BY currency;
+	`
 
-	var balances []Balance
-	for rows.Next() {
-		var b Balance
-		if err := rows.Scan(&b.Currency, &b.Amount); err != nil {
-			return nil, err
-		}
-		balances = append(balances, b)
+	var b Balance
+	account := fmt.Sprintf("user:%d", userID)
+	err := Conn.DB.QueryRow(query, account, currency).Scan(&b.Currency, &b.Amount)
+	if err == sql.ErrNoRows {
+		return Balance{Currency: currency, Amount: 0}, nil
 	}
-	return balances, nil
+	if err != nil {
+		return Balance{}, err
+	}
+	return b, nil
 }
 
 // TRANSACTIONS
-func ProcessTransaction(tx TransactionRequest) error {
+func ProcessTransaction(tx TransactionRequest) (string, error) {
 	txID := uuid.New().String()
 	_, err := Conn.DB.Exec(`
 		INSERT INTO transactions (id, user_id, type, amount, currency, status, tx_hash)
 		VALUES ($1, $2, $3, $4, $5, 'completed', $6)`,
 		txID, tx.UserID, tx.Type, tx.Amount, tx.Currency, tx.TxHash)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Double-entry
@@ -99,35 +92,68 @@ func ProcessTransaction(tx TransactionRequest) error {
 		credit = "external"
 		debit = fmt.Sprintf("user:%d", tx.UserID)
 	default:
-		return fmt.Errorf("unsupported type")
+		return "", fmt.Errorf("unsupported type")
 	}
 
 	if err := insertLedgerEntry(txID, credit, tx.Currency, tx.Amount, "credit"); err != nil {
-		return err
+		return "", err
 	}
 	if err := insertLedgerEntry(txID, debit, tx.Currency, tx.Amount, "debit"); err != nil {
-		return err
+		return "", err
 	}
-	return nil
+
+	return txID, nil
 }
 
-func ProcessTransfer(req TransferRequest) error {
+func ProcessTransfer(req TransferRequest) (string, error) {
 	txID := uuid.New().String()
-	_, err := Conn.DB.Exec(`INSERT INTO transactions (id, user_id, type, amount, currency, status)
-	VALUES ($1, $2, 'transfer', $3, $4, 'completed')`, txID, req.FromUserID, req.Amount, req.Currency)
+
+	// Start transaction
+	tx, err := Conn.DB.Begin()
 	if err != nil {
-		return err
+		return "", err
 	}
-	// debit sender
+	defer func() {
+		if p := recover(); p != nil {
+			err := tx.Rollback()
+			if err != nil {
+				log.Printf("Error rolling back transaction: %v", err)
+				return
+			}
+			panic(p) // re-throw panic after Rollback
+		} else if err != nil {
+			err := tx.Rollback()
+			if err != nil {
+				log.Printf("Error rolling back transaction: %v", err)
+				return
+			}
+		} else {
+			err = tx.Commit()
+		}
+	}()
+
+	// Insert into transactions
+	_, err = tx.Exec(`INSERT INTO transactions (id, user_id, type, amount, currency, status)
+		VALUES ($1, $2, 'transfer', $3, $4, 'completed')`,
+		txID, req.FromUserID, req.Amount, req.Currency)
+	if err != nil {
+		return "", err
+	}
+
 	from := fmt.Sprintf("user:%d", req.FromUserID)
 	to := fmt.Sprintf("user:%d", req.ToUserID)
-	if err := insertLedgerEntry(txID, from, req.Currency, req.Amount, "debit"); err != nil {
-		return err
+
+	// Insert debit ledger entry
+	if err = insertLedgerEntryTx(tx, txID, from, req.Currency, req.Amount, "debit"); err != nil {
+		return "", err
 	}
-	if err := insertLedgerEntry(txID, to, req.Currency, req.Amount, "credit"); err != nil {
-		return err
+
+	// Insert credit ledger entry
+	if err = insertLedgerEntryTx(tx, txID, to, req.Currency, req.Amount, "credit"); err != nil {
+		return "", err
 	}
-	return nil
+
+	return txID, nil
 }
 
 func insertLedgerEntry(txID, account, currency string, amount float64, direction string) error {
@@ -237,4 +263,12 @@ func ReconcileAll() ([]map[string]string, error) {
 		})
 	}
 	return mismatches, nil
+}
+
+func insertLedgerEntryTx(tx *sql.Tx, transactionID, account, currency string, amount float64, direction string) error {
+	_, err := tx.Exec(`
+		INSERT INTO ledger_entries (id, transaction_id, account, amount, currency, direction)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		uuid.New().String(), transactionID, account, amount, currency, direction)
+	return err
 }

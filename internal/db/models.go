@@ -32,11 +32,3 @@ type Balance struct {
 	Currency string  `json:"currency"`
 	Amount   float64 `json:"amount"`
 }
-
-// For tests only
-type Entry struct {
-	Account   string
-	Amount    float64
-	Currency  string
-	Direction string // "debit" or "credit"
-}

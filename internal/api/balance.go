@@ -5,14 +5,24 @@ import (
 	"github.com/gorilla/mux"
 	"ledger-system/internal/db"
 	"net/http"
+	"strconv"
 )
 
 func GetUserBalances(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
-	balances, err := db.GetUserBalances(id)
+	idStr := mux.Vars(r)["id"]
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
 		return
 	}
-	json.NewEncoder(w).Encode(balances)
+	balances, err := db.GetUserBalances(id, "")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(balances); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }

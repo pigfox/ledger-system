@@ -12,6 +12,10 @@ A Go-based internal ledger + blockchain reconciler supporting ETH, MATIC, and US
 - Blockchain indexer: scans ETH & ERC-20 transactions
 - Reconciliation engine: compares ledger and chain state
 - RESTful API: exposed via Gorilla Mux
+- Added features:
+  - Api key authentication
+  - Api versioning
+  - Health endpoint
 
 ---
 

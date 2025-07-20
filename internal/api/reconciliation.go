@@ -12,5 +12,9 @@ func Reconcile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	json.NewEncoder(w).Encode(report)
+	err = json.NewEncoder(w).Encode(report)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 }
