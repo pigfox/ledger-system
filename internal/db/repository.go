@@ -3,8 +3,8 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"ledger-system/internal/config"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -19,7 +19,7 @@ type Connection struct {
 }
 
 func init() {
-	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	db, err := sql.Open("postgres", config.Cfg.DBUrl)
 	if err != nil {
 		log.Fatal("DB connect error:", err)
 	}
@@ -27,7 +27,7 @@ func init() {
 }
 
 func Connect() Connection {
-	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	db, err := sql.Open("postgres", config.Cfg.DBUrl)
 	if err != nil {
 		log.Fatalf("DB connection failed: %v", err)
 	}
@@ -41,34 +41,66 @@ func CreateUser(u User) (User, error) {
 	return u, err
 }
 
-func AddUserAddress(a UserAddress) error {
-	_, err := Conn.DB.Exec(`INSERT INTO user_addresses (user_id, chain, address) VALUES ($1, $2, $3)`,
-		a.UserID, a.Chain, a.Address)
-	return err
+func AddUserAddress(a *UserAddress) error {
+	return Conn.DB.QueryRow(`
+		INSERT INTO user_addresses (user_id, chain, address)
+		VALUES ($1, $2, $3)
+		RETURNING id`,
+		a.UserID, a.Chain, a.Address).Scan(&a.ID)
 }
 
-func GetUserBalances(userID int, currency string) (Balance, error) {
-	query := `
-		SELECT currency,
-		       SUM(CASE
-		             WHEN direction = 'credit' THEN amount
-		             WHEN direction = 'debit' THEN -amount
-		           END) AS amount
-		FROM ledger_entries
-		WHERE account = $1 AND currency = $2
-		GROUP BY currency;
-	`
-
-	var b Balance
+func GetUserBalances(userID int, currency string) ([]Balance, error) {
 	account := fmt.Sprintf("user:%d", userID)
-	err := Conn.DB.QueryRow(query, account, currency).Scan(&b.Currency, &b.Amount)
-	if err == sql.ErrNoRows {
-		return Balance{Currency: currency, Amount: 0}, nil
+
+	var rows *sql.Rows
+	var err error
+
+	if currency != "" {
+		query := `
+			SELECT currency,
+			       SUM(CASE
+			             WHEN direction = 'credit' THEN amount
+			             WHEN direction = 'debit' THEN -amount
+			           END) AS amount
+			FROM ledger_entries
+			WHERE account = $1 AND currency = $2
+			GROUP BY currency;
+		`
+		rows, err = Conn.DB.Query(query, account, currency)
+	} else {
+		query := `
+			SELECT currency,
+			       SUM(CASE
+			             WHEN direction = 'credit' THEN amount
+			             WHEN direction = 'debit' THEN -amount
+			           END) AS amount
+			FROM ledger_entries
+			WHERE account = $1
+			GROUP BY currency;
+		`
+		rows, err = Conn.DB.Query(query, account)
 	}
+
 	if err != nil {
-		return Balance{}, err
+		return nil, err
 	}
-	return b, nil
+	defer rows.Close()
+
+	var balances []Balance
+	for rows.Next() {
+		var b Balance
+		if err := rows.Scan(&b.Currency, &b.Amount); err != nil {
+			return nil, err
+		}
+		balances = append(balances, b)
+	}
+
+	if len(balances) == 0 && currency != "" {
+		// Return zero balance for requested currency
+		return []Balance{{Currency: currency, Amount: 0}}, nil
+	}
+
+	return balances, nil
 }
 
 // TRANSACTIONS

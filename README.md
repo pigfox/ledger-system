@@ -23,6 +23,6 @@ A Go-based internal ledger + blockchain reconciler supporting ETH, MATIC, and US
 
 ```bash
 docker-compose up / docker-compose down
+./sql.sh #to reset and seed the database
 go run ./cmd/server
-
 go clean -testcache && go test -v -count=1 ./test/...

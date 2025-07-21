@@ -8,7 +8,8 @@ CREATE TABLE user_addresses (
     id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(id),
     chain TEXT NOT NULL,
-    address TEXT NOT NULL UNIQUE
+    address TEXT NOT NULL,
+    UNIQUE (user_id, chain, address)
 );
 
 CREATE TABLE transactions (

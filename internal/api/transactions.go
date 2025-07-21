@@ -55,7 +55,15 @@ func Withdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if tx.Amount > balance.Amount {
+	var available float64
+	for _, b := range balance {
+		if b.Currency == tx.Currency {
+			available = b.Amount
+			break
+		}
+	}
+
+	if tx.Amount > available {
 		http.Error(w, "Insufficient balance", http.StatusBadRequest)
 		return
 	}
@@ -98,7 +106,15 @@ func Transfer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to check balance: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if tx.Amount > balance.Amount {
+	var available float64
+	for _, b := range balance {
+		if b.Currency == tx.Currency {
+			available = b.Amount
+			break
+		}
+
+	}
+	if tx.Amount > available {
 		http.Error(w, "Insufficient balance", http.StatusBadRequest)
 		return
 	}

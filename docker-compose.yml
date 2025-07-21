@@ -3,14 +3,14 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15
-    container_name: xyz_postgres
+    container_name: ${CONTAINER_NAME}
     restart: always
     environment:
-      POSTGRES_USER: xyz
-      POSTGRES_PASSWORD: xyzpass
-      POSTGRES_DB: xyzledger
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
