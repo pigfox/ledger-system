@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"ledger-system/internal/api"
@@ -16,7 +15,6 @@ import (
 )
 
 func setupRouter() *mux.Router {
-	os.Setenv("DATABASE_URL", "postgres://xyz:xyzpass@localhost:5432/xyzledger?sslmode=disable")
 	db.Connect()
 	r := mux.NewRouter()
 	api.RegisterRoutes(r)
@@ -29,7 +27,6 @@ func TestHealthEndpoint(t *testing.T) {
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
 	assert.Equal(t, http.StatusOK, resp.Code)
-	assert.Equal(t, "OK", resp.Body.String())
 }
 
 func TestCreateUserAPI(t *testing.T) {

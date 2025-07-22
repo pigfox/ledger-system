@@ -41,7 +41,8 @@ CREATE TABLE onchain_transactions (
     amount NUMERIC NOT NULL,
     currency TEXT NOT NULL,
     direction TEXT NOT NULL,
-    block_height INT,
-    confirmed BOOLEAN,
-    created_at TIMESTAMP DEFAULT now()
+    block_height INT NOT NULL,
+    confirmed BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE (tx_hash, address)
 );

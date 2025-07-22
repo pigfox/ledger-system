@@ -38,6 +38,8 @@ func GetAddressTransactions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(txs)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -52,6 +54,8 @@ func GetAddressBalance(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(balance)
 	if err != nil {
 		http.Error(w, err.Error(), 500)

@@ -4,6 +4,12 @@ set -euo pipefail
 set -x
 set -e
 clear
+echo "This script will drop and recreate the database. All data will be lost. Required for first time"
+read -p "Do you want to continue? (y/N): " confirm
+if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+  echo "❌ Operation cancelled."
+  exit 1
+fi
 
 # Load environment variables
 if [[ ! -f ./.env ]]; then

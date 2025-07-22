@@ -19,9 +19,9 @@ func RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/addresses", RegisterAddress).Methods("POST")
 	api.HandleFunc("/addresses/{address}/transactions", GetAddressTransactions).Methods("GET")
 	api.HandleFunc("/addresses/{address}/balances", GetAddressBalance).Methods("GET")
-	api.HandleFunc("/"+v+"/reconciliation", Reconcile).Methods("POST")
+	api.HandleFunc("/reconciliation", Reconcile).Methods("POST")
 
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	})
+	}).Methods("GET")
 }
