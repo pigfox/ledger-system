@@ -29,7 +29,7 @@ func TestHealthEndpoint(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.Code)
 }
 
-func TestCreateUserAPI(t *testing.T) {
+func TestCreateUser(t *testing.T) {
 	router := setupRouter()
 
 	body := map[string]string{
@@ -40,6 +40,7 @@ func TestCreateUserAPI(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/v1/users", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", config.Cfg.APIKEY)
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
@@ -66,4 +67,17 @@ func TestAddUserAddress(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, resp.Code)
 	assert.Contains(t, resp.Body.String(), `"user_id":1`)
+}
+
+func TestGetUserBalances(t *testing.T) {
+	router := setupRouter()
+
+	req := httptest.NewRequest("GET", "/api/v1/users/2/balances", nil)
+	req.Header.Set("X-API-Key", config.Cfg.APIKEY)
+
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	assert.Equal(t, http.StatusOK, resp.Code)
+	assert.Contains(t, resp.Body.String(), `"currency":"ETH"`)
 }
