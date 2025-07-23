@@ -46,5 +46,3 @@ CREATE TABLE onchain_transactions (
     created_at TIMESTAMP DEFAULT NOW(),
     UNIQUE (tx_hash, address)
 );
-
-ALTER USER xyz CREATEDB;

@@ -7,7 +7,7 @@ import (
 	"regexp"
 )
 
-func CreateUser(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	type Req struct {
 		Name  string `json:"name"`
 		Email string `json:"email"`
@@ -32,7 +32,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		Email: req.Email,
 	}
 
-	user, err := db.CreateUser(user)
+	user, err := h.DB.CreateUser(user)
 	if err != nil {
 		http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
 		return

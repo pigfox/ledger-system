@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func Deposit(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 	var tx db.TransactionRequest
 	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
 		http.Error(w, "Invalid deposit request", http.StatusBadRequest)
@@ -20,7 +20,7 @@ func Deposit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tx.Type = "deposit"
-	id, err := db.ProcessTransaction(tx)
+	id, err := h.DB.ProcessTransaction(tx)
 	if err != nil {
 		http.Error(w, "Failed to process transaction: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -35,7 +35,7 @@ func Deposit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Withdraw(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 	var tx db.TransactionRequest
 	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
 		http.Error(w, "Invalid withdrawal request", http.StatusBadRequest)
@@ -49,7 +49,7 @@ func Withdraw(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check balance
-	balance, err := db.GetUserBalances(tx.UserID, tx.Currency)
+	balance, err := h.DB.GetUserBalances(tx.UserID, tx.Currency)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -69,7 +69,7 @@ func Withdraw(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tx.Type = "withdrawal"
-	txID, err := db.ProcessTransaction(tx)
+	txID, err := h.DB.ProcessTransaction(tx)
 	if err != nil {
 		http.Error(w, "Failed to process transaction: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -84,7 +84,7 @@ func Withdraw(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Transfer(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	var tx db.TransferRequest
 	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
 		http.Error(w, "Invalid transfer request", http.StatusBadRequest)
@@ -101,7 +101,7 @@ func Transfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	balance, err := db.GetUserBalances(tx.FromUserID, tx.Currency)
+	balance, err := h.DB.GetUserBalances(tx.FromUserID, tx.Currency)
 	if err != nil {
 		http.Error(w, "Failed to check balance: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -120,7 +120,7 @@ func Transfer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ✅ Process transfer
-	txID, err := db.ProcessTransfer(tx)
+	txID, err := h.DB.ProcessTransfer(tx)
 	if err != nil {
 		http.Error(w, "Failed to process transfer: "+err.Error(), http.StatusInternalServerError)
 		return

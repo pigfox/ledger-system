@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-func GetUserBalances(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetUserBalances(w http.ResponseWriter, r *http.Request) {
 	idStr := mux.Vars(r)["id"]
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -19,7 +19,7 @@ func GetUserBalances(w http.ResponseWriter, r *http.Request) {
 	// Optional query param ?currency=ETH
 	currency := r.URL.Query().Get("currency")
 
-	balances, err := db.GetUserBalances(id, currency)
+	balances, err := h.DB.GetUserBalances(id, currency)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

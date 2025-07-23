@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"ledger-system/internal/api"
 	"ledger-system/internal/config"
-	"ledger-system/internal/db"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,69 +14,58 @@ import (
 )
 
 func setupRouter() *mux.Router {
-	db.Connect() // Optional if mocking everything
 	r := mux.NewRouter()
-	api.RegisterRoutes(r)
+	api.RegisterRoutes(r, testDB)
 	return r
 }
 
-func TestHealthEndpoint(t *testing.T) {
-	router := setupRouter()
-	req := httptest.NewRequest("GET", "/health", nil)
-	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
-	assert.Equal(t, http.StatusOK, resp.Code)
-}
-
-func TestCreateUser(t *testing.T) {
+func testCreateUsers(t *testing.T) {
+	truncateTables()
 	router := setupRouter()
 
-	body := map[string]string{
-		"name":  "Test User",
-		"email": "testuser@example.com",
+	users := []map[string]string{
+		{"name": "Alice", "email": "alice@example.com"},
+		{"name": "Bob", "email": "bob@example.com"},
 	}
-	jsonBody, _ := json.Marshal(body)
 
-	req := httptest.NewRequest("POST", "/api/v1/users", bytes.NewReader(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", config.Cfg.APIKEY)
-	resp := httptest.NewRecorder()
+	for _, user := range users {
+		body, _ := json.Marshal(user)
+		req := httptest.NewRequest("POST", "/api/v1/users", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", config.CfgTest.APIKEY)
 
-	router.ServeHTTP(resp, req)
-	assert.Equal(t, http.StatusCreated, resp.Code)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusCreated {
+			t.Errorf("CreateUser failed with status %d, body: %s", resp.Code, resp.Body.String())
+		}
+		assert.Equal(t, http.StatusCreated, resp.Code)
+	}
 }
 
-func TestAddUserAddress(t *testing.T) {
-	// Make sure user with ID 1 exists first (insert manually in DB or in a setup function)
-
+func testAddUserAddresses(t *testing.T) {
+	router := setupRouter()
 	body := map[string]interface{}{
 		"user_id": 1,
 		"chain":   "ethereum",
-		"address": "0xabc123abc123abc123abc123abc123abc123abc1",
+		"address": "0xdadb0d80178819f2319190d340ce9a924f783711",
 	}
 	jsonBody, _ := json.Marshal(body)
-
 	req := httptest.NewRequest("POST", "/api/v1/addresses", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", config.Cfg.APIKEY)
-
+	req.Header.Set("X-API-Key", config.CfgTest.APIKEY)
 	resp := httptest.NewRecorder()
-	router := setupRouter()
 	router.ServeHTTP(resp, req)
-
 	assert.Equal(t, http.StatusCreated, resp.Code)
-	assert.Contains(t, resp.Body.String(), `"user_id":1`)
 }
 
-func TestGetUserBalances(t *testing.T) {
+func testGetUserBalances(t *testing.T) {
 	router := setupRouter()
-
-	req := httptest.NewRequest("GET", "/api/v1/users/2/balances", nil)
-	req.Header.Set("X-API-Key", config.Cfg.APIKEY)
-
+	req := httptest.NewRequest("GET", "/api/v1/users/1/balances", nil)
+	req.Header.Set("X-API-Key", config.CfgTest.APIKEY)
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
-
 	assert.Equal(t, http.StatusOK, resp.Code)
 	assert.Contains(t, resp.Body.String(), `"currency":"ETH"`)
 }

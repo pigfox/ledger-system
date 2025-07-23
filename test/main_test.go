@@ -4,97 +4,178 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+	"ledger-system/internal/config"
+	"ledger-system/internal/constants"
+	"ledger-system/internal/db"
 	"log"
 	"os"
+	"strings"
 	"testing"
 	"time"
-
-	_ "github.com/lib/pq"
 )
 
-var testDB *sql.DB
-
-const (
-	dbName     = "xyzledger_test"
-	dbUser     = "xyz"
-	dbPassword = "xyz"
-	dbPort     = "5432"
-	dbHost     = "localhost"
-)
+var testDB *db.DB
 
 func init() {
-	_ = godotenv.Load("../.env")
-	dbPassword := os.Getenv("POSTGRES_PASSWORD")
-	fmt.Println(dbPassword)
+	// Load environment variables
+	if err := godotenv.Load("../.env"); err != nil {
+		log.Println(".env file not found or could not be loaded")
+	}
+
+	config.CfgTest = config.LoadCfgTest()
+	// Ensure the test DB is created before running tests
+	createTestDB()
 }
 
 func TestMain(m *testing.M) {
-	// Create test DB
-	createTestDB()
+	_ = godotenv.Load("../.env")
 
-	// Connect to it
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPassword, dbHost, dbPort, dbName)
-	var err error
-	testDB, err = sql.Open("postgres", dsn)
+	// Load test config
+	config.CfgTest = config.LoadCfgTest()
+
+	// Connect to test DB
+	testDB = db.ConnectTest()
+	defer func() {
+		if err := testDB.Conn.Close(); err != nil {
+			log.Fatalf("Failed to close test DB connection: %v", err)
+		}
+		log.Println("Test DB connection closed")
+	}()
+
+	log.Printf("Loading schema from: %s", constants.InitSchema)
+
+	schema, err := os.ReadFile("../" + constants.InitSchema)
 	if err != nil {
-		log.Fatalf("Failed to connect to test database: %v", err)
+		log.Fatalf("Failed to read schema file: %v", err)
 	}
 
-	// Run migrations (or load schema)
-	schema, _ := os.ReadFile("migrations/001_init.sql")
-	if _, err := testDB.Exec(string(schema)); err != nil {
-		log.Fatalf("Failed to initialize test DB schema: %v", err)
+	log.Println("Executing schema...")
+	if _, err := testDB.Conn.Exec(string(schema)); err != nil {
+		log.Fatalf("❌ Failed to initialize test DB schema: %v", err)
+	}
+	log.Println("✅ Test DB schema initialized")
+
+	// Clean up all tables
+	tables := []string{"ledger_entries", "onchain_transactions", "transactions", "user_addresses", "users"}
+	for _, table := range tables {
+		_, err := testDB.Conn.Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table))
+		if err != nil {
+			log.Printf("Failed to truncate table %s: %v", table, err)
+		}
 	}
 
 	// Run tests
 	code := m.Run()
-
-	// Cleanup
-	err = testDB.Close()
-	if err != nil {
-		log.Fatalf("Failed to connect to postgres: %v", err)
-		return
-	}
-	dropTestDB()
-
 	os.Exit(code)
 }
 
 func createTestDB() {
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/postgres?sslmode=disable", dbUser, dbPassword, dbHost, dbPort)
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		log.Fatalf("Failed to connect to postgres: %v", err)
+	var db *sql.DB
+	var err error
+
+	// Wait for DB to be ready
+	maxAttempts := 10
+	for i := 1; i <= maxAttempts; i++ {
+		db, err = sql.Open("postgres", config.CfgTest.DBUrl)
+		if err == nil && db.Ping() == nil {
+			break
+		}
+		log.Printf("Waiting for test DB (%d/%d)...", i, maxAttempts)
+		time.Sleep(2 * time.Second)
+	}
+	if err != nil || db.Ping() != nil {
+		log.Fatalf("Test DB not ready after %d attempts", maxAttempts)
 	}
 	defer func(db *sql.DB) {
 		err := db.Close()
 		if err != nil {
-			log.Println("Failed to close test DB", err)
+			log.Fatalf("Failed to close test DB connection: %v", err)
+		} else {
+			log.Println("Test DB connection closed")
 		}
 	}(db)
 
-	// Terminate existing connections (if any)
-	_, _ = db.Exec(fmt.Sprintf(`
-		SELECT pg_terminate_backend(pg_stat_activity.pid)
-		FROM pg_stat_activity
-		WHERE pg_stat_activity.datname = '%s'
-		  AND pid <> pg_backend_pid();`, dbName))
-
-	_, _ = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
-	if _, err := db.Exec(fmt.Sprintf("CREATE DATABASE %s OWNER %s", dbName, dbUser)); err != nil {
+	// Create DB if it doesn't exist
+	_, err = db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, config.CfgTest.DBName))
+	if err != nil && !strings.Contains(err.Error(), "already exists") {
 		log.Fatalf("Failed to create test DB: %v", err)
 	}
-	time.Sleep(1 * time.Second) // allow time for DB to become available
+
+	// Now connect to test DB and drop all tables
+	testDB, err := sql.Open("postgres", config.CfgTest.DBUrl)
+	if err != nil {
+		log.Fatalf("Failed to connect to test DB: %v", err)
+	}
+	defer func(testDB *sql.DB) {
+		err := testDB.Close()
+		if err != nil {
+			log.Fatalf("Failed to close test DB connection: %v", err)
+		} else {
+			log.Println("Test DB connection closed")
+		}
+	}(testDB)
+
+	_, err = testDB.Exec(`
+		DO $$ DECLARE
+			r RECORD;
+		BEGIN
+			FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+				EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+			END LOOP;
+		END $$;
+	`)
+	if err != nil {
+		log.Fatalf("Failed to clean test DB: %v", err)
+	}
 }
 
 func dropTestDB() {
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/postgres?sslmode=disable", dbUser, dbPassword, dbHost, dbPort)
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", config.CfgTest.DBUrl)
 	if err != nil {
-		log.Printf("Warning: Failed to reconnect to drop DB: %v", err)
+		log.Printf("Failed to reconnect to clean DB: %v", err)
 		return
 	}
 	defer db.Close()
 
-	_, _ = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+	// Clean all existing tables
+	_, err = db.Exec(`
+        DO $$ DECLARE
+            r RECORD;
+        BEGIN
+            FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+                EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+            END LOOP;
+        END $$;
+    `)
+	if err != nil {
+		log.Printf("Failed to clean test DB tables: %v", err)
+	}
+}
+
+func TestEndToEndLedgerFlow(t *testing.T) {
+	t.Run("CreateUsers", testCreateUsers)
+	t.Run("AddUserAddresses", testAddUserAddresses)
+	t.Run("DepositFunds", testDepositFunds)
+	t.Run("WithdrawFunds", testWithdrawFunds)
+	t.Run("TransferFunds", testTransferFunds)
+	t.Run("GetUserBalances", testGetUserBalances)
+	t.Run("GetAddressTransactions", testGetAddressTransactions)
+	t.Run("GetAddressBalance", testGetAddressBalance)
+}
+
+func truncateTables() {
+	// Clean DB before test run
+	_, err := testDB.Conn.Exec(`
+		DO $$ DECLARE
+			r RECORD;
+		BEGIN
+			FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+				EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE';
+			END LOOP;
+		END $$;
+	`)
+	if err != nil {
+		log.Fatalf("Failed to clean test DB: %v", err)
+	}
 }

@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-func RegisterAddress(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RegisterAddress(w http.ResponseWriter, r *http.Request) {
 	var req db.UserAddress
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
@@ -19,7 +19,7 @@ func RegisterAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.AddUserAddress(&req); err != nil {
+	if err := h.DB.AddUserAddress(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -31,9 +31,9 @@ func RegisterAddress(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetAddressTransactions(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetAddressTransactions(w http.ResponseWriter, r *http.Request) {
 	addr := mux.Vars(r)["address"]
-	txs, err := db.GetAddressTxs(addr)
+	txs, err := h.DB.GetAddressTxs(addr)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -47,9 +47,9 @@ func GetAddressTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetAddressBalance(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetAddressBalance(w http.ResponseWriter, r *http.Request) {
 	addr := mux.Vars(r)["address"]
-	balance, err := db.GetOnChainBalance(addr)
+	balance, err := h.DB.GetOnChainBalance(addr)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
