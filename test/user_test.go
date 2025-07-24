@@ -47,7 +47,7 @@ func testCreateUsers(t *testing.T) {
 func testAddUserAddresses(t *testing.T) {
 	router := setupRouter()
 	body := map[string]interface{}{
-		"user_id": 1,
+		"user_id": userID1,
 		"chain":   "ethereum",
 		"address": mainAddress,
 	}

@@ -16,7 +16,7 @@ import (
 func testDepositFunds(t *testing.T) {
 	router := setupRouter()
 	body := map[string]interface{}{
-		"user_id":  1,
+		"user_id":  userID1,
 		"amount":   100.0,
 		"currency": "ETH",
 	}
@@ -32,7 +32,7 @@ func testDepositFunds(t *testing.T) {
 func testWithdrawFunds(t *testing.T) {
 	router := setupRouter()
 	body := map[string]interface{}{
-		"user_id":  1,
+		"user_id":  userID1,
 		"amount":   50.0,
 		"currency": "ETH",
 	}
@@ -48,8 +48,8 @@ func testWithdrawFunds(t *testing.T) {
 func testTransferFunds(t *testing.T) {
 	router := setupRouter()
 	body := map[string]interface{}{
-		"from_user_id": 1,
-		"to_user_id":   2,
+		"from_user_id": userID1,
+		"to_user_id":   userID2,
 		"amount":       25.0,
 		"currency":     "ETH",
 	}

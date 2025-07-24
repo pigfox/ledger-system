@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 
 	log.Println("Executing schema...")
 	if _, err := testDB.Conn.Exec(string(schema)); err != nil {
-		log.Fatalf("❌ Failed to initialize test DB schema: %v", err)
+		log.Fatalf("Failed to initialize test DB schema: %v", err)
 	}
 	log.Println("✅ Test DB schema initialized")
 
@@ -133,29 +133,6 @@ func createTestDB() {
 	`)
 	if err != nil {
 		log.Fatalf("Failed to clean test DB: %v", err)
-	}
-}
-
-func dropTestDB() {
-	db, err := sql.Open("postgres", config.CfgTest.DBUrl)
-	if err != nil {
-		log.Printf("Failed to reconnect to clean DB: %v", err)
-		return
-	}
-	defer db.Close()
-
-	// Clean all existing tables
-	_, err = db.Exec(`
-        DO $$ DECLARE
-            r RECORD;
-        BEGIN
-            FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-                EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
-            END LOOP;
-        END $$;
-    `)
-	if err != nil {
-		log.Printf("Failed to clean test DB tables: %v", err)
 	}
 }
 
