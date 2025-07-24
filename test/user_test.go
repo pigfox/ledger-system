@@ -49,7 +49,7 @@ func testAddUserAddresses(t *testing.T) {
 	body := map[string]interface{}{
 		"user_id": 1,
 		"chain":   "ethereum",
-		"address": "0xdadb0d80178819f2319190d340ce9a924f783711",
+		"address": mainAddress,
 	}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/api/v1/addresses", bytes.NewReader(jsonBody))

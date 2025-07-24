@@ -1,5 +1,10 @@
 package db
 
+import (
+	"github.com/google/uuid"
+	"time"
+)
+
 type User struct {
 	ID    int    `json:"id"`
 	Name  string `json:"name"`
@@ -33,10 +38,28 @@ type Balance struct {
 	Amount   float64 `json:"amount"`
 }
 
-// Test
-type Entry struct {
-	Account   string
+type OnChainTransaction struct {
+	ID        uuid.UUID
+	Address   string
+	TxHash    string
 	Amount    float64
 	Currency  string
-	Direction string
+	Direction string // "credit" or "debit"
+}
+
+type LedgerEntry struct {
+	ID            string    // UUID, typically generated in code
+	TransactionID string    // foreign key to transactions.id
+	Account       string    // e.g., "user:123", "external"
+	Amount        float64   // stored as NUMERIC in DB
+	Currency      string    // e.g., "ETH", "USDC"
+	Direction     string    // "credit" or "debit"
+	CreatedAt     time.Time // auto-filled by DB
+}
+
+type ReconciliationReport struct {
+	Matched      int
+	Flagged      int
+	Errors       []string
+	Incompatible []OnChainTransaction
 }

@@ -19,10 +19,19 @@ A Go-based internal ledger + blockchain reconciler supporting ETH, MATIC, and US
 
 ---
 
+Save the partially populated .env.example as .env and fill in the required values.
+
 ## 🚀 Run
 
 ```bash
-docker compose up / docker compose down -v --remove-orphans && kill -9 $(lsof -ti tcp:8080) 2>/dev/null || true
 
+Terminal 1
+./start.sh || ./shutdown.sh
+
+Terminal 2
 go run ./cmd/server
-go clean -testcache && go test -v -count=1 ./test/...
+
+Terminal 3
+./test.sh
+```
+See api.md for more details on the API.

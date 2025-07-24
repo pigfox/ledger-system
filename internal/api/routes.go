@@ -29,7 +29,7 @@ func RegisterRoutes(r *mux.Router, db *db.DB) {
 	api.HandleFunc("/addresses", h.RegisterAddress).Methods("POST")
 	api.HandleFunc("/addresses/{address}/transactions", h.GetAddressTransactions).Methods("GET")
 	api.HandleFunc("/addresses/{address}/balances", h.GetAddressBalance).Methods("GET")
-	api.HandleFunc("/reconciliation", Reconcile).Methods("POST")
+	api.HandleFunc("/reconciliation", h.ReconcileHandler).Methods("POST")
 
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

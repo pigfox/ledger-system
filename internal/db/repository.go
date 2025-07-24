@@ -1,6 +1,5 @@
 package db
 
-/*
 import (
 	"database/sql"
 	"fmt"
@@ -26,14 +25,15 @@ func init() {
 	}
 	Conn.DB = db
 }
-
-func Connect() Connection {
-	db, err := sql.Open("postgres", config.Cfg.DBUrl)
+func (db *DB) FindUserByAddress(addr string) (int, error) {
+	var userID int
+	err := db.Conn.QueryRow(`
+		SELECT user_id FROM user_addresses WHERE LOWER(address) = LOWER($1)
+	`, addr).Scan(&userID)
 	if err != nil {
-		log.Fatalf("DB connection failed: %v", err)
+		return 0, err
 	}
-	Conn.DB = db
-	return Conn
+	return userID, nil
 }
 
 func CreateUser(u User) (User, error) {
@@ -49,8 +49,6 @@ func AddUserAddress(a *UserAddress) error {
 		RETURNING id`,
 		a.UserID, a.Chain, a.Address).Scan(&a.ID)
 }
-
-
 
 // TRANSACTIONS
 func ProcessTransaction(tx TransactionRequest) (string, error) {
@@ -244,6 +242,3 @@ func insertLedgerEntryTx(tx *sql.Tx, transactionID, account, currency string, am
 		uuid.New().String(), transactionID, account, amount, currency, direction)
 	return err
 }
-
-
-*/

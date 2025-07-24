@@ -6,6 +6,7 @@ require (
 	github.com/ethereum/go-ethereum v1.16.1
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.1
+	github.com/jimlawless/whereami v0.0.0-20230806140227-e3eb03695f09
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/stretchr/testify v1.10.0

@@ -17,6 +17,11 @@ import (
 
 var testDB *db.DB
 
+var mainAddress = "0xdadB0d80178819F2319190D340ce9A924f783711"
+var mainTxHash = "0xc17dce8502f989fde54da9922bc36a2767d0ae5b7ecf7904e49ff99aa19ad4e7"
+var userID1 = 1 // Default user ID for tests
+var userID2 = 2
+
 func init() {
 	// Load environment variables
 	if err := godotenv.Load("../.env"); err != nil {
@@ -33,6 +38,7 @@ func TestMain(m *testing.M) {
 
 	// Load test config
 	config.CfgTest = config.LoadCfgTest()
+	config.Cfg = config.CfgTest
 
 	// Connect to test DB
 	testDB = db.ConnectTest()
@@ -154,7 +160,12 @@ func dropTestDB() {
 }
 
 func TestEndToEndLedgerFlow(t *testing.T) {
+	t.Run("Health", testHealth)
 	t.Run("CreateUsers", testCreateUsers)
+	t.Run("SeedTransaction", func(t *testing.T) {
+		seedTransaction(t)
+	})
+
 	t.Run("AddUserAddresses", testAddUserAddresses)
 	t.Run("DepositFunds", testDepositFunds)
 	t.Run("WithdrawFunds", testWithdrawFunds)
@@ -162,6 +173,7 @@ func TestEndToEndLedgerFlow(t *testing.T) {
 	t.Run("GetUserBalances", testGetUserBalances)
 	t.Run("GetAddressTransactions", testGetAddressTransactions)
 	t.Run("GetAddressBalance", testGetAddressBalance)
+	t.Run("Reconciliation", testReconciliation)
 }
 
 func truncateTables() {

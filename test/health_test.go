@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestHealthEndpoint(t *testing.T) {
+func testHealth(t *testing.T) {
 	router := setupRouter()
 	req := httptest.NewRequest("GET", "/health", nil)
 	resp := httptest.NewRecorder()

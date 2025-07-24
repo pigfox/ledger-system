@@ -118,40 +118,68 @@ func (d *DB) GetUserBalances(userID int, currency string) ([]Balance, error) {
 
 func (d *DB) ProcessTransaction(tx TransactionRequest) (string, error) {
 	txID := uuid.New().String()
+
 	_, err := d.Conn.Exec(`
 		INSERT INTO transactions (id, user_id, type, amount, currency, status, tx_hash)
-		VALUES ($1, $2, $3, $4, $5, 'completed', $6)`,
-		txID, tx.UserID, tx.Type, tx.Amount, tx.Currency, tx.TxHash)
+		VALUES ($1, $2, $3, $4, $5, 'completed', $6)
+	`, txID, tx.UserID, tx.Type, tx.Amount, tx.Currency, tx.TxHash)
 	if err != nil {
 		return "", err
 	}
 
-	var credit, debit string
+	var creditAccount, debitAccount string
 	switch tx.Type {
 	case "deposit":
-		credit = fmt.Sprintf("user:%d", tx.UserID)
-		debit = "external"
+		creditAccount = fmt.Sprintf("user:%d", tx.UserID)
+		debitAccount = "external"
 	case "withdrawal":
-		credit = "external"
-		debit = fmt.Sprintf("user:%d", tx.UserID)
+		creditAccount = "external"
+		debitAccount = fmt.Sprintf("user:%d", tx.UserID)
 	default:
-		return "", fmt.Errorf("unsupported type")
+		return "", fmt.Errorf("unsupported transaction type: %s", tx.Type)
 	}
 
-	if err := d.insertLedgerEntry(txID, credit, tx.Currency, tx.Amount, "credit"); err != nil {
+	creditEntry := &LedgerEntry{
+		TransactionID: txID,
+		Account:       creditAccount,
+		Amount:        tx.Amount,
+		Currency:      tx.Currency,
+		Direction:     "credit",
+		CreatedAt:     time.Now(),
+	}
+
+	debitEntry := &LedgerEntry{
+		TransactionID: txID,
+		Account:       debitAccount,
+		Amount:        tx.Amount,
+		Currency:      tx.Currency,
+		Direction:     "debit",
+		CreatedAt:     time.Now(),
+	}
+
+	if err := d.InsertLedgerEntry(creditEntry); err != nil {
 		return "", err
 	}
-	if err := d.insertLedgerEntry(txID, debit, tx.Currency, tx.Amount, "debit"); err != nil {
+	if err := d.InsertLedgerEntry(debitEntry); err != nil {
 		return "", err
 	}
 
 	return txID, nil
 }
 
-func (d *DB) insertLedgerEntry(txID, account, currency string, amount float64, direction string) error {
-	_, err := d.Conn.Exec(`INSERT INTO ledger_entries (id, transaction_id, account, currency, amount, direction)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		uuid.New(), txID, account, currency, amount, direction)
+func (d *DB) InsertLedgerEntry(entry *LedgerEntry) error {
+	_, err := d.Conn.Exec(`
+		INSERT INTO ledger_entries (id, transaction_id, account, amount, currency, direction, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`,
+		uuid.New(),
+		entry.TransactionID,
+		entry.Account,
+		entry.Amount,
+		entry.Currency,
+		entry.Direction,
+		entry.CreatedAt,
+	)
 	return err
 }
 
@@ -187,14 +215,6 @@ func (d *DB) ProcessTransfer(req TransferRequest) (string, error) {
 		return "", err
 	}
 	return txID, nil
-}
-
-func insertLedgerEntryTx(tx *sql.Tx, transactionID, account, currency string, amount float64, direction string) error {
-	_, err := tx.Exec(`
-		INSERT INTO ledger_entries (id, transaction_id, account, amount, currency, direction)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		uuid.New().String(), transactionID, account, amount, currency, direction)
-	return err
 }
 
 func (d *DB) GetAddressTxs(address string) ([]map[string]interface{}, error) {

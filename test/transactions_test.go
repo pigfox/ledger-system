@@ -3,10 +3,13 @@ package test
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"ledger-system/internal/config"
+	"ledger-system/internal/db"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -57,4 +60,27 @@ func testTransferFunds(t *testing.T) {
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
 	assert.Equal(t, http.StatusOK, resp.Code)
+}
+
+func seedTransaction(t *testing.T) {
+	tx := db.TransactionRequest{
+		UserID:   userID1,
+		Type:     "deposit",
+		Amount:   100.0,
+		Currency: "ETH",
+		TxHash:   mainTxHash,
+	}
+
+	_, err := testDB.ProcessTransaction(tx)
+	if err != nil {
+		t.Fatalf("Failed to seed transaction: %v", err)
+	}
+
+	_, err = testDB.Conn.Exec(`
+		INSERT INTO onchain_transactions (id, address, tx_hash, amount, currency, direction, block_height, confirmed, created_at)
+		VALUES ($1, $2, $3, $4, $5, 'credit', 12345678, true, NOW())
+	`, uuid.New(), strings.ToLower(mainAddress), mainTxHash, 100.0, "ETH")
+	if err != nil {
+		t.Fatalf("Failed to seed onchain transaction: %v", err)
+	}
 }
