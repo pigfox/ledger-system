@@ -69,3 +69,15 @@ func testGetUserBalances(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.Code)
 	assert.Contains(t, resp.Body.String(), `"currency":"ETH"`)
 }
+
+func testGetUserBalanceByCurrency(t *testing.T) {
+	router := setupRouter()
+	req := httptest.NewRequest("GET", "/api/v1/users/1/balances?currency=ETH", nil)
+	req.Header.Set("X-API-Key", config.CfgTest.APIKEY)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	assert.Equal(t, http.StatusOK, resp.Code, "Expected 200 OK but got %d", resp.Code)
+	body := resp.Body.String()
+	assert.Contains(t, body, `"currency":"ETH"`, "Expected balance result to contain currency ETH")
+	assert.Contains(t, body, `"amount":`, "Expected balance result to contain amount")
+}

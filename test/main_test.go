@@ -142,12 +142,12 @@ func TestEndToEndLedgerFlow(t *testing.T) {
 	t.Run("SeedTransaction", func(t *testing.T) {
 		seedTransaction(t)
 	})
-
 	t.Run("AddUserAddresses", testAddUserAddresses)
 	t.Run("DepositFunds", testDepositFunds)
 	t.Run("WithdrawFunds", testWithdrawFunds)
 	t.Run("TransferFunds", testTransferFunds)
 	t.Run("GetUserBalances", testGetUserBalances)
+	t.Run("GetUserBalanceByCurrency", testGetUserBalanceByCurrency)
 	t.Run("GetAddressTransactions", testGetAddressTransactions)
 	t.Run("GetAddressBalance", testGetAddressBalance)
 	t.Run("Reconciliation", testReconciliation)
