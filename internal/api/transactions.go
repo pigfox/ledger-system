@@ -2,11 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"ledger-system/internal/config"
+	"ledger-system/internal/constants"
 	"ledger-system/internal/db"
 	"net/http"
 )
 
 func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var tx db.TransactionRequest
 	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
 		http.Error(w, "Invalid deposit request", http.StatusBadRequest)
@@ -14,13 +17,13 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Basic validation
-	if tx.UserID == 0 || tx.Amount <= 0 || tx.Currency == "" {
+	if tx.UserID == 0 || tx.Amount <= 0 || !config.IsValidCurrency(tx.Currency) {
 		http.Error(w, "Missing or invalid fields", http.StatusBadRequest)
 		return
 	}
 
-	tx.Type = "deposit"
-	id, err := h.DB.ProcessTransaction(tx)
+	tx.Type = constants.Deposit
+	id, err := h.DB.ProcessTransaction(ctx, tx)
 	if err != nil {
 		http.Error(w, "Failed to process transaction: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -36,6 +39,7 @@ func (h *Handler) Deposit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var tx db.TransactionRequest
 	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
 		http.Error(w, "Invalid withdrawal request", http.StatusBadRequest)
@@ -43,13 +47,13 @@ func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Basic validation
-	if tx.UserID == 0 || tx.Amount <= 0 || tx.Currency == "" {
+	if tx.UserID == 0 || tx.Amount <= 0 || !config.IsValidCurrency(tx.Currency) {
 		http.Error(w, "Missing or invalid fields", http.StatusBadRequest)
 		return
 	}
 
 	// Check balance
-	balance, err := h.DB.GetUserBalances(tx.UserID, tx.Currency)
+	balance, err := h.DB.GetUserBalances(ctx, tx.UserID, tx.Currency)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -68,8 +72,8 @@ func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx.Type = "withdrawal"
-	txID, err := h.DB.ProcessTransaction(tx)
+	tx.Type = constants.Withdrawal
+	txID, err := h.DB.ProcessTransaction(ctx, tx)
 	if err != nil {
 		http.Error(w, "Failed to process transaction: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -85,13 +89,14 @@ func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	var tx db.TransferRequest
 	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
 		http.Error(w, "Invalid transfer request", http.StatusBadRequest)
 		return
 	}
 
-	if tx.FromUserID == 0 || tx.ToUserID == 0 || tx.Amount <= 0 || tx.Currency == "" {
+	if tx.FromUserID == 0 || tx.ToUserID == 0 || tx.Amount <= 0 || !config.IsValidCurrency(tx.Currency) {
 		http.Error(w, "Missing or invalid fields", http.StatusBadRequest)
 		return
 	}
@@ -101,7 +106,7 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	balance, err := h.DB.GetUserBalances(tx.FromUserID, tx.Currency)
+	balance, err := h.DB.GetUserBalances(ctx, tx.FromUserID, tx.Currency)
 	if err != nil {
 		http.Error(w, "Failed to check balance: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -120,7 +125,7 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ✅ Process transfer
-	txID, err := h.DB.ProcessTransfer(tx)
+	txID, err := h.DB.ProcessTransfer(ctx, tx)
 	if err != nil {
 		http.Error(w, "Failed to process transfer: "+err.Error(), http.StatusInternalServerError)
 		return

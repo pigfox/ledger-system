@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"github.com/gorilla/mux"
 	"ledger-system/internal/constants"
 	"ledger-system/internal/db"
@@ -8,18 +9,24 @@ import (
 )
 
 type Handler struct {
-	DB *db.DB
+	DB  *db.DB
+	Ctx context.Context
 }
 
-func NewHandler(database *db.DB) *Handler {
-	return &Handler{DB: database}
+func NewHandler(ctx context.Context, db *db.DB) *Handler {
+	return &Handler{
+		DB:  db,
+		Ctx: ctx,
+	}
 }
 
-func RegisterRoutes(r *mux.Router, db *db.DB) {
+func RegisterRoutes(ctx context.Context, r *mux.Router, db *db.DB) http.Handler {
 	v := constants.APIV1
 	api := r.PathPrefix("/api/" + v).Subrouter()
-	api.Use(APIKeyMiddleware)
-	h := NewHandler(db)
+	api.Use(RecoverMiddleware)
+	api.Use(ContextTimeoutMiddleware(constants.TimeOut))
+	api.Use(CheckAPIKeyMiddleware)
+	h := NewHandler(ctx, db)
 	api.HandleFunc("/users", h.CreateUser).Methods("POST")
 	api.HandleFunc("/transactions/deposit", h.Deposit).Methods("POST")
 	api.HandleFunc("/transactions/withdraw", h.Withdraw).Methods("POST")
@@ -34,4 +41,6 @@ func RegisterRoutes(r *mux.Router, db *db.DB) {
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}).Methods("GET")
+
+	return r
 }

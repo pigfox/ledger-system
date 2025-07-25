@@ -15,7 +15,7 @@ import (
 
 func setupRouter() *mux.Router {
 	r := mux.NewRouter()
-	api.RegisterRoutes(r, testDB)
+	api.RegisterRoutes(testCtx, r, testDB)
 	return r
 }
 

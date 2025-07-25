@@ -8,6 +8,14 @@ import (
 
 var Cfg Config
 var CfgTest Config
+var AllowedCurrencies map[string]bool
+
+func init() {
+	AllowedCurrencies = make(map[string]bool)
+	AllowedCurrencies["ETH"] = true
+	AllowedCurrencies["MATIC"] = true
+	AllowedCurrencies["USDC"] = true
+}
 
 type Config struct {
 	Port   string

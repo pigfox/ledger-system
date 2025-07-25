@@ -26,12 +26,20 @@ Save the partially populated .env.example as .env and fill in the required value
 ```bash
 
 Terminal 1
-./start.sh || ./shutdown.sh
+./start.sh || ./shutdown.sh # Shutdown will remove everything in the database
 
 Terminal 2
 go run ./cmd/server
 
 Terminal 3
 ./test.sh
+
+# Cheat script to run all API calls in sequence
+Terminal 4
+./run-sequence.sh
 ```
 See api.md for more details on the API.
+
+The following address have been tested:
+https://etherscan.io/address/0xdadb0d80178819f2319190d340ce9a924f783711
+https://etherscan.io/address/0x0013d9bb14d37654cdacb0a00209c6994511afa1

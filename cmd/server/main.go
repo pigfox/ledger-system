@@ -21,29 +21,14 @@ func main() {
 	_ = godotenv.Load(".env")
 
 	config.Cfg = config.LoadCfg()
-	router := mux.NewRouter()
 	dbPg := db.Connect()
-	api.RegisterRoutes(router, dbPg)
-	handler := api.RecoverMiddleware(router)
+	router := mux.NewRouter()
+	handler := api.RegisterRoutes(ctx, router, dbPg)
 
-	var exists bool
-	err := dbPg.Conn.QueryRow(`SELECT EXISTS (
-		SELECT FROM information_schema.tables 
-		WHERE table_schema = 'public' AND table_name = 'users'
-	)`).Scan(&exists)
-	if err != nil {
-		log.Fatalf("Failed to check schema existence: %v", err)
+	if err := db.InitIfNeeded(dbPg, constants.InitSchema); err != nil {
+		log.Fatalf("❌ DB schema initialization failed: %v", err)
 	}
 
-	if !exists {
-		log.Printf("Loading schema from: %s", constants.InitSchema)
-		if err := dbPg.InitSchema(constants.InitSchema); err != nil {
-			log.Fatalf("Failed to initialize schema: %v", err)
-		}
-		log.Println("Schema applied")
-	} else {
-		log.Println("Schema already exists, skipping initialization")
-	}
 	indexer := blockchain.New(ctx, config.Cfg.RPCUrl, dbPg.Conn, 15*time.Second)
 	go indexer.Start(ctx)
 

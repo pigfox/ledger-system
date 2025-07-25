@@ -2,6 +2,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"ledger-system/internal/config"
@@ -51,21 +52,32 @@ func ConnectTest() *DB {
 	return &DB{Conn: db}
 }
 
-func (d *DB) CreateUser(u User) (User, error) {
-	row := d.Conn.QueryRow(`INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id`, u.Name, u.Email)
+func (d *DB) CreateUser(ctx context.Context, u User) (User, error) {
+	row := d.Conn.QueryRowContext(ctx, `INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id`, u.Name, u.Email)
 	err := row.Scan(&u.ID)
 	return u, err
 }
 
-func (d *DB) AddUserAddress(a *UserAddress) error {
-	return d.Conn.QueryRow(`
+func (db *DB) FindUserByAddress(ctx context.Context, addr string) (int, error) {
+	var userID int
+	err := db.Conn.QueryRowContext(ctx, `
+		SELECT user_id FROM user_addresses WHERE LOWER(address) = LOWER($1)
+	`, addr).Scan(&userID)
+	if err != nil {
+		return 0, err
+	}
+	return userID, nil
+}
+
+func (d *DB) AddUserAddress(ctx context.Context, a *UserAddress) error {
+	return d.Conn.QueryRowContext(ctx, `
 		INSERT INTO user_addresses (user_id, chain, address)
 		VALUES ($1, $2, $3)
 		RETURNING id`,
 		a.UserID, a.Chain, a.Address).Scan(&a.ID)
 }
 
-func (d *DB) GetUserBalances(userID int, currency string) ([]Balance, error) {
+func (d *DB) GetUserBalances(ctx context.Context, userID int, currency string) ([]Balance, error) {
 	account := fmt.Sprintf("user:%d", userID)
 
 	var rows *sql.Rows
@@ -81,7 +93,7 @@ func (d *DB) GetUserBalances(userID int, currency string) ([]Balance, error) {
 			FROM ledger_entries
 			WHERE account = $1 AND currency = $2
 			GROUP BY currency;`
-		rows, err = d.Conn.Query(query, account, currency)
+		rows, err = d.Conn.QueryContext(ctx, query, account, currency)
 	} else {
 		query := `
 			SELECT currency,
@@ -116,13 +128,13 @@ func (d *DB) GetUserBalances(userID int, currency string) ([]Balance, error) {
 	return balances, nil
 }
 
-func (d *DB) ProcessTransaction(tx TransactionRequest) (string, error) {
+func (d *DB) ProcessTransaction(ctx context.Context, tx TransactionRequest) (string, error) {
 	txID := uuid.New().String()
 
-	_, err := d.Conn.Exec(`
-		INSERT INTO transactions (id, user_id, type, amount, currency, status, tx_hash)
-		VALUES ($1, $2, $3, $4, $5, 'completed', $6)
-	`, txID, tx.UserID, tx.Type, tx.Amount, tx.Currency, tx.TxHash)
+	_, err := d.Conn.ExecContext(ctx, `
+	INSERT INTO transactions (id, user_id, type, amount, currency, status, tx_hash, block_height)
+	VALUES ($1, $2, $3, $4, $5, 'completed', $6, $7)
+`, txID, tx.UserID, tx.Type, tx.Amount, tx.Currency, tx.TxHash, tx.BlockHeight)
 	if err != nil {
 		return "", err
 	}
@@ -157,22 +169,26 @@ func (d *DB) ProcessTransaction(tx TransactionRequest) (string, error) {
 		CreatedAt:     time.Now(),
 	}
 
-	if err := d.InsertLedgerEntry(creditEntry); err != nil {
+	if err := d.InsertLedgerEntry(ctx, creditEntry); err != nil {
 		return "", err
 	}
-	if err := d.InsertLedgerEntry(debitEntry); err != nil {
+	if err := d.InsertLedgerEntry(ctx, debitEntry); err != nil {
 		return "", err
 	}
 
 	return txID, nil
 }
 
-func (d *DB) InsertLedgerEntry(entry *LedgerEntry) error {
-	_, err := d.Conn.Exec(`
+func (d *DB) InsertLedgerEntry(ctx context.Context, entry *LedgerEntry) error {
+	entry.ID = uuid.New().String()
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = time.Now()
+	}
+	_, err := d.Conn.ExecContext(ctx, `
 		INSERT INTO ledger_entries (id, transaction_id, account, amount, currency, direction, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`,
-		uuid.New(),
+		entry.ID,
 		entry.TransactionID,
 		entry.Account,
 		entry.Amount,
@@ -183,14 +199,34 @@ func (d *DB) InsertLedgerEntry(entry *LedgerEntry) error {
 	return err
 }
 
-func (d *DB) ProcessTransfer(req TransferRequest) (string, error) {
+func (d *DB) InsertLedgerEntryTx(ctx context.Context, tx *sql.Tx, entry *LedgerEntry) error {
+	entry.ID = uuid.New().String()
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = time.Now()
+	}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO ledger_entries (id, transaction_id, account, amount, currency, direction, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`,
+		entry.ID,
+		entry.TransactionID,
+		entry.Account,
+		entry.Amount,
+		entry.Currency,
+		entry.Direction,
+		entry.CreatedAt,
+	)
+	return err
+}
+
+func (d *DB) ProcessTransfer(ctx context.Context, req TransferRequest) (string, error) {
 	txID := uuid.New().String()
 	dbTx, err := d.Conn.Begin()
 	if err != nil {
 		return "", err
 	}
 
-	_, err = dbTx.Exec(`
+	_, err = dbTx.ExecContext(ctx, `
 		INSERT INTO transactions (id, user_id, type, amount, currency, status)
 		VALUES ($1, $2, 'transfer', $3, $4, 'completed')`,
 		txID, req.FromUserID, req.Amount, req.Currency)
@@ -199,14 +235,32 @@ func (d *DB) ProcessTransfer(req TransferRequest) (string, error) {
 		return "", err
 	}
 
-	from := fmt.Sprintf("user:%d", req.FromUserID)
-	to := fmt.Sprintf("user:%d", req.ToUserID)
+	now := time.Now()
 
-	if err = insertLedgerEntryTx(dbTx, txID, from, req.Currency, req.Amount, "debit"); err != nil {
+	// Debit from sender
+	entryFrom := &LedgerEntry{
+		TransactionID: txID,
+		Account:       fmt.Sprintf("user:%d", req.FromUserID),
+		Amount:        req.Amount,
+		Currency:      req.Currency,
+		Direction:     "debit",
+		CreatedAt:     now,
+	}
+	if err = d.InsertLedgerEntryTx(ctx, dbTx, entryFrom); err != nil {
 		dbTx.Rollback()
 		return "", err
 	}
-	if err = insertLedgerEntryTx(dbTx, txID, to, req.Currency, req.Amount, "credit"); err != nil {
+
+	// Credit to recipient
+	entryTo := &LedgerEntry{
+		TransactionID: txID,
+		Account:       fmt.Sprintf("user:%d", req.ToUserID),
+		Amount:        req.Amount,
+		Currency:      req.Currency,
+		Direction:     "credit",
+		CreatedAt:     now,
+	}
+	if err = d.InsertLedgerEntryTx(ctx, dbTx, entryTo); err != nil {
 		dbTx.Rollback()
 		return "", err
 	}
@@ -217,8 +271,8 @@ func (d *DB) ProcessTransfer(req TransferRequest) (string, error) {
 	return txID, nil
 }
 
-func (d *DB) GetAddressTxs(address string) ([]map[string]interface{}, error) {
-	rows, err := d.Conn.Query(`
+func (d *DB) GetAddressTxs(ctx context.Context, address string) ([]map[string]interface{}, error) {
+	rows, err := d.Conn.QueryContext(ctx, `
 		SELECT tx_hash, amount, currency, direction, block_height, confirmed, created_at
 		FROM onchain_transactions
 		WHERE address = $1
@@ -252,7 +306,7 @@ func (d *DB) GetAddressTxs(address string) ([]map[string]interface{}, error) {
 	return results, nil
 }
 
-func (d *DB) GetOnChainBalance(address string) (map[string]float64, error) {
+func (d *DB) GetOnChainBalance(ctx context.Context, address string) (map[string]float64, error) {
 	query := `
 	SELECT currency, SUM(
 		CASE direction WHEN 'credit' THEN amount ELSE -amount END
@@ -260,7 +314,7 @@ func (d *DB) GetOnChainBalance(address string) (map[string]float64, error) {
 	FROM onchain_transactions
 	WHERE address = $1 AND confirmed = true
 	GROUP BY currency`
-	rows, err := d.Conn.Query(query, strings.ToLower(address))
+	rows, err := d.Conn.QueryContext(ctx, query, strings.ToLower(address))
 	if err != nil {
 		return nil, err
 	}

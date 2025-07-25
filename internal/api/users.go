@@ -2,12 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"ledger-system/internal/config"
 	"ledger-system/internal/db"
 	"net/http"
-	"regexp"
 )
 
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	type Req struct {
 		Name  string `json:"name"`
 		Email string `json:"email"`
@@ -22,7 +23,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Name is required", http.StatusBadRequest)
 		return
 	}
-	if !isValidEmail(req.Email) {
+	if !config.IsValidEmail(req.Email) {
 		http.Error(w, "Invalid email format", http.StatusBadRequest)
 		return
 	}
@@ -32,7 +33,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Email: req.Email,
 	}
 
-	user, err := h.DB.CreateUser(user)
+	user, err := h.DB.CreateUser(ctx, user)
 	if err != nil {
 		http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -47,9 +48,4 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
-}
-
-func isValidEmail(email string) bool {
-	re := regexp.MustCompile(`^[a-zA-Z0-9._%%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	return re.MatchString(email)
 }

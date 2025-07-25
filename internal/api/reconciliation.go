@@ -1,19 +1,24 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 )
 
 func (h *Handler) ReconcileHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 	report, err := h.DB.ReconcileOnChainToLedger(ctx)
 	if err != nil {
-		http.Error(w, "Reconciliation failed: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("reconciliation failed: %v", err)
+		http.Error(w, "internal reconciliation error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(report)
+	err = json.NewEncoder(w).Encode(report)
+	if err != nil {
+		log.Printf("failed to encode reconciliation report: %v", err)
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	}
 }

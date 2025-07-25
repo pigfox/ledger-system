@@ -19,11 +19,12 @@ type UserAddress struct {
 }
 
 type TransactionRequest struct {
-	UserID   int     `json:"user_id"`
-	Amount   float64 `json:"amount"`
-	Currency string  `json:"currency"`
-	TxHash   string  `json:"tx_hash,omitempty"`
-	Type     string  `json:"type"`
+	UserID      int     `json:"user_id"`
+	Amount      float64 `json:"amount"`
+	Currency    string  `json:"currency"`
+	TxHash      string  `json:"tx_hash,omitempty"`
+	BlockHeight int     `json:"block_height,omitempty"`
+	Type        string  `json:"type"`
 }
 
 type TransferRequest struct {
@@ -39,12 +40,13 @@ type Balance struct {
 }
 
 type OnChainTransaction struct {
-	ID        uuid.UUID
-	Address   string
-	TxHash    string
-	Amount    float64
-	Currency  string
-	Direction string // "credit" or "debit"
+	ID          uuid.UUID
+	Address     string
+	TxHash      string
+	Amount      float64
+	Currency    string
+	Direction   string // "credit" or "debit"
+	BlockHeight int64
 }
 
 type LedgerEntry struct {
@@ -58,8 +60,8 @@ type LedgerEntry struct {
 }
 
 type ReconciliationReport struct {
-	Matched      int
-	Flagged      int
-	Errors       []string
-	Incompatible []OnChainTransaction
+	Matched      int                  `json:"Matched"`
+	Flagged      int                  `json:"Flagged"`
+	Errors       []string             `json:"Errors"`
+	Incompatible []OnChainTransaction `json:"Incompatible"`
 }

@@ -64,14 +64,15 @@ func testTransferFunds(t *testing.T) {
 
 func seedTransaction(t *testing.T) {
 	tx := db.TransactionRequest{
-		UserID:   userID1,
-		Type:     "deposit",
-		Amount:   100.0,
-		Currency: "ETH",
-		TxHash:   mainTxHash,
+		UserID:      userID1,
+		Type:        "deposit",
+		Amount:      100.0,
+		Currency:    "ETH",
+		TxHash:      mainTxHash,
+		BlockHeight: 12345678,
 	}
 
-	_, err := testDB.ProcessTransaction(tx)
+	_, err := testDB.ProcessTransaction(testCtx, tx)
 	if err != nil {
 		t.Fatalf("Failed to seed transaction: %v", err)
 	}

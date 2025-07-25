@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"github.com/joho/godotenv"
@@ -21,6 +22,7 @@ var mainAddress = "0xdadB0d80178819F2319190D340ce9A924f783711"
 var mainTxHash = "0xc17dce8502f989fde54da9922bc36a2767d0ae5b7ecf7904e49ff99aa19ad4e7"
 var userID1 = 1 // Default user ID for tests
 var userID2 = 2
+var testCtx = context.Background()
 
 func init() {
 	// Load environment variables
