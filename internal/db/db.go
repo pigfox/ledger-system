@@ -6,8 +6,10 @@ import (
 	"database/sql"
 	"fmt"
 	"ledger-system/internal/config"
+	"ledger-system/internal/constants"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,38 +20,81 @@ type DB struct {
 	Conn *sql.DB
 }
 
-// InitSchema loads the schema if required
-func (d *DB) InitSchema(path string) error {
-	log.Println("Loading schema from:", path) // ✅ Add this line
+func (d *DB) InitIfNeeded(schemaPath string) error {
+	// Resolve absolute path to schema file relative to project root
+	absPath, err := resolveSchemaPath(schemaPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve schema path: %w", err)
+	}
 
-	schema, err := os.ReadFile(path)
+	log.Println("Loading schema from:", absPath)
+
+	schema, err := os.ReadFile(absPath)
 	if err != nil {
 		return fmt.Errorf("failed to read schema file: %w", err)
 	}
 
 	log.Println("Executing schema...")
-	_, err = d.Conn.Exec(string(schema))
-	if err != nil {
+	if _, err := d.Conn.Exec(string(schema)); err != nil {
 		return fmt.Errorf("failed to execute schema: %w", err)
 	}
 	log.Println("Schema applied")
 	return nil
 }
 
-func Connect() *DB {
-	db, err := sql.Open("postgres", config.Cfg.DBUrl)
-	if err != nil {
-		log.Fatalf("DB connection failed: %v", err)
+func ConnectWithAutoCreate(curCfg config.Config) *DB {
+	if curCfg.DBName == "" {
+		log.Fatal("config.DBName is empty")
 	}
-	return &DB{Conn: db}
+
+	// Connect to admin DB
+	adminURL := strings.Replace(curCfg.DBUrl, curCfg.DBName, "postgres", 1)
+	adminDB, err := sql.Open("postgres", adminURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to admin DB: %v", err)
+	}
+	defer adminDB.Close()
+
+	// Check if DB exists
+	var exists bool
+	err = adminDB.QueryRow("SELECT EXISTS(SELECT FROM pg_database WHERE datname = $1)", curCfg.DBName).Scan(&exists)
+	if err != nil {
+		log.Fatalf("Failed to check if DB exists: %v", err)
+	}
+
+	if !exists {
+		log.Printf("DB '%s' does not exist. Creating...", curCfg.DBName)
+		if _, err := adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", curCfg.DBName)); err != nil {
+			log.Fatalf("Failed to create DB: %v", err)
+		}
+		log.Printf("DB '%s' created", curCfg.DBName)
+	}
+
+	// Connect to the actual DB
+	db, err := sql.Open("postgres", curCfg.DBUrl)
+	if err != nil {
+		log.Fatalf("Failed to connect to DB: %v", err)
+	}
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Ping to DB failed: %v", err)
+	}
+	log.Println("Connected to DB successfully")
+
+	wrapped := &DB{Conn: db}
+
+	if err := wrapped.InitIfNeeded(constants.InitSchema); err != nil {
+		log.Fatalf("DB schema initialization failed: %v", err)
+	}
+
+	return wrapped
+}
+
+func Connect() *DB {
+	return ConnectWithAutoCreate(config.Cfg)
 }
 
 func ConnectTest() *DB {
-	db, err := sql.Open("postgres", config.CfgTest.DBUrl)
-	if err != nil {
-		log.Fatalf("DB connection failed: %v", err)
-	}
-	return &DB{Conn: db}
+	return ConnectWithAutoCreate(config.CfgTest)
 }
 
 func (d *DB) CreateUser(ctx context.Context, u User) (User, error) {
@@ -130,22 +175,33 @@ func (d *DB) GetUserBalances(ctx context.Context, userID int, currency string) (
 
 func (d *DB) ProcessTransaction(ctx context.Context, tx TransactionRequest) (string, error) {
 	txID := uuid.New().String()
+	now := time.Now()
 
-	_, err := d.Conn.ExecContext(ctx, `
-	INSERT INTO transactions (id, user_id, type, amount, currency, status, tx_hash, block_height)
-	VALUES ($1, $2, $3, $4, $5, 'completed', $6, $7)
-`, txID, tx.UserID, tx.Type, tx.Amount, tx.Currency, tx.TxHash, tx.BlockHeight)
+	txDB, err := d.Conn.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err != nil {
+			txDB.Rollback()
+		}
+	}()
+
+	_, err = txDB.ExecContext(ctx, `
+		INSERT INTO transactions (id, user_id, type, amount, currency, status, tx_hash, block_height, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, txID, tx.UserID, tx.Type, tx.Amount, tx.Currency, "completed", tx.TxHash, tx.BlockHeight, now)
 	if err != nil {
 		return "", err
 	}
 
 	var creditAccount, debitAccount string
 	switch tx.Type {
-	case "deposit":
+	case constants.Debit, constants.Deposit:
 		creditAccount = fmt.Sprintf("user:%d", tx.UserID)
-		debitAccount = "external"
-	case "withdrawal":
-		creditAccount = "external"
+		debitAccount = constants.External
+	case constants.Withdrawal:
+		creditAccount = constants.External
 		debitAccount = fmt.Sprintf("user:%d", tx.UserID)
 	default:
 		return "", fmt.Errorf("unsupported transaction type: %s", tx.Type)
@@ -156,8 +212,11 @@ func (d *DB) ProcessTransaction(ctx context.Context, tx TransactionRequest) (str
 		Account:       creditAccount,
 		Amount:        tx.Amount,
 		Currency:      tx.Currency,
-		Direction:     "credit",
-		CreatedAt:     time.Now(),
+		Direction:     constants.Credit,
+		CreatedAt:     now,
+	}
+	if err := d.InsertLedgerEntryTx(ctx, txDB, creditEntry); err != nil {
+		return "", err
 	}
 
 	debitEntry := &LedgerEntry{
@@ -165,14 +224,14 @@ func (d *DB) ProcessTransaction(ctx context.Context, tx TransactionRequest) (str
 		Account:       debitAccount,
 		Amount:        tx.Amount,
 		Currency:      tx.Currency,
-		Direction:     "debit",
-		CreatedAt:     time.Now(),
+		Direction:     constants.Debit,
+		CreatedAt:     now,
 	}
-
-	if err := d.InsertLedgerEntry(ctx, creditEntry); err != nil {
+	if err := d.InsertLedgerEntryTx(ctx, txDB, debitEntry); err != nil {
 		return "", err
 	}
-	if err := d.InsertLedgerEntry(ctx, debitEntry); err != nil {
+
+	if err := txDB.Commit(); err != nil {
 		return "", err
 	}
 
@@ -335,4 +394,68 @@ func (d *DB) GetOnChainBalance(ctx context.Context, address string) (map[string]
 		balances[currency] = balance
 	}
 	return balances, nil
+}
+
+func (d *DB) TruncateAllTables() {
+	tables := []string{"ledger_entries", "onchain_transactions", "transactions", "user_addresses", "users"}
+	for _, table := range tables {
+		if _, err := d.Conn.Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table)); err != nil {
+			log.Printf("Failed to truncate %s: %v", table, err)
+		}
+	}
+}
+
+func (d *DB) Close() error {
+	if d.Conn != nil {
+		return d.Conn.Close()
+	}
+	return nil
+}
+
+func (d *DB) Drop() error {
+	if d.Conn != nil {
+		_, err := d.Conn.Exec("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+		if err != nil {
+			return fmt.Errorf("failed to drop schema: %w", err)
+		}
+		log.Println("Dropped and recreated public schema")
+		return nil
+	}
+	return fmt.Errorf("no connection to drop schema")
+}
+
+func (d *DB) LoadSchema(schema string) {
+	if d.Conn == nil {
+		log.Fatal("no database connection")
+	}
+
+	_, err := d.Conn.Exec(schema)
+	if err != nil {
+		log.Fatalf("failed to execute schema: %v", err)
+	}
+
+	log.Println("Schema executed successfully")
+}
+
+func resolveSchemaPath(rel string) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Search upward until we find the project root (where go.mod lives)
+	dir := cwd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("go.mod not found in any parent directory of %s", cwd)
+		}
+		dir = parent
+	}
+
+	abs := filepath.Join(dir, rel)
+	return abs, nil
 }

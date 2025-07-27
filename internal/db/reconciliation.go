@@ -13,7 +13,7 @@ func (db *DB) ReconcileOnChainToLedger(ctx context.Context) (*ReconciliationRepo
 	rows, err := db.Conn.QueryContext(ctx, `
 		SELECT id, address, tx_hash, amount, currency, direction, block_height
 		FROM onchain_transactions
-		WHERE reconciled = false
+		WHERE reconciled IS FALSE
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("fetch unreconciled txs: %w", err)
@@ -40,15 +40,16 @@ func (db *DB) ReconcileOnChainToLedger(ctx context.Context) (*ReconciliationRepo
 			continue
 		}
 
-		account := fmt.Sprintf("user:%d", userID)
 		if !isValidLedgerMatch(tx) {
 			log.Printf("Incompatible TX: %s", tx.TxHash)
 			report.Incompatible = append(report.Incompatible, tx)
 			continue
 		}
-		opposite := "credit"
-		if tx.Direction == "credit" {
-			opposite = "debit"
+
+		account := fmt.Sprintf("user:%d", userID)
+		opposite := constants.Credit
+		if tx.Direction == constants.Credit {
+			opposite = constants.Debit
 		}
 
 		var exists int
@@ -74,9 +75,11 @@ func (db *DB) ReconcileOnChainToLedger(ctx context.Context) (*ReconciliationRepo
 		}
 
 		_, err = txDB.ExecContext(ctx, `
-			INSERT INTO transactions (id, user_id, type, amount, currency, status, tx_hash, block_height, created_at)
-			VALUES ($1, $2, 'reconciliation', $3, $4, 'completed', $5, 0, $6)
-		`, tx.ID, userID, tx.Amount, tx.Currency, tx.TxHash, time.Now())
+			INSERT INTO transactions (
+				id, user_id, type, amount, currency, status, tx_hash, block_height, created_at
+			)
+			VALUES ($1, $2, 'reconciliation', $3, $4, 'completed', $5, $6, $7)
+		`, tx.ID, userID, tx.Amount, tx.Currency, tx.TxHash, tx.BlockHeight, time.Now())
 		if err != nil {
 			txDB.Rollback()
 			report.Errors = append(report.Errors, fmt.Sprintf("insert transaction error for %s: %v", tx.ID, err))
@@ -84,7 +87,6 @@ func (db *DB) ReconcileOnChainToLedger(ctx context.Context) (*ReconciliationRepo
 			continue
 		}
 
-		// 1st entry: user:<id>
 		userEntry := &LedgerEntry{
 			TransactionID: tx.ID.String(),
 			Account:       account,
@@ -100,10 +102,9 @@ func (db *DB) ReconcileOnChainToLedger(ctx context.Context) (*ReconciliationRepo
 			continue
 		}
 
-		// 2nd entry: external
 		externalEntry := &LedgerEntry{
 			TransactionID: tx.ID.String(),
-			Account:       "external",
+			Account:       constants.External,
 			Amount:        tx.Amount,
 			Currency:      tx.Currency,
 			Direction:     opposite,
@@ -116,7 +117,6 @@ func (db *DB) ReconcileOnChainToLedger(ctx context.Context) (*ReconciliationRepo
 			continue
 		}
 
-		// Mark as reconciled
 		_, err = txDB.ExecContext(ctx, `
 			UPDATE onchain_transactions SET reconciled = true WHERE id = $1
 		`, tx.ID)
@@ -161,5 +161,6 @@ func isValidLedgerMatch(tx OnChainTransaction) bool {
 		return false
 	}
 
+	//log.Printf("Valid TX: %s | %s | %f %s", tx.TxHash, tx.Direction, tx.Amount, tx.Currency)
 	return true
 }

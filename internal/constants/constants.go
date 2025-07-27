@@ -11,4 +11,8 @@ const (
 	Withdrawal         string        = "withdrawal"
 	Credit             string        = "credit"
 	Debit              string        = "debit"
+	External           string        = "external"
+	ETH                string        = "ETH"
+	MATIC              string        = "MATIC"
+	USDC               string        = "USDC"
 )

@@ -43,3 +43,17 @@ See api.md for more details on the API.
 The following address have been tested:
 https://etherscan.io/address/0xdadb0d80178819f2319190d340ce9a924f783711
 https://etherscan.io/address/0x0013d9bb14d37654cdacb0a00209c6994511afa1
+
+# Difference Between `transactions` and `onchain_transactions`
+
+| Table                | Purpose                                                                | Source                    | Used In        |
+|----------------------|------------------------------------------------------------------------|---------------------------|----------------|
+| `onchain_transactions` | Represents raw transactions fetched from a blockchain (ETH, MATIC, etc.) | On-chain via indexers or RPC | Reconciliation |
+| `transactions`         | Internal ledger activity: deposits, withdrawals, transfers, or reconciled entries | Internal system            | Ledger logic    |
+
+
+To view raw data in the database, you can use the following commands:
+
+```bash
+# psql "postgres://test_xyz:test_xyzpass@localhost:55432/test_xyzledger"
+# psql "postgres://xyz:xyzpass@localhost:5432/xyzledger"

@@ -2,8 +2,11 @@ package config
 
 import (
 	"fmt"
+	"github.com/joho/godotenv"
+	"ledger-system/internal/constants"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 var Cfg Config
@@ -12,9 +15,9 @@ var AllowedCurrencies map[string]bool
 
 func init() {
 	AllowedCurrencies = make(map[string]bool)
-	AllowedCurrencies["ETH"] = true
-	AllowedCurrencies["MATIC"] = true
-	AllowedCurrencies["USDC"] = true
+	AllowedCurrencies[constants.ETH] = true
+	AllowedCurrencies[constants.MATIC] = true
+	AllowedCurrencies[constants.USDC] = true
 }
 
 type Config struct {
@@ -23,6 +26,23 @@ type Config struct {
 	DBName string
 	RPCUrl string
 	APIKEY string
+}
+
+func SetUp() {
+	envPath := findEnvPath()
+
+	if envPath == "" {
+		log.Println(".env file not found in current or parent directories")
+	} else {
+		if err := godotenv.Load(envPath); err != nil {
+			log.Printf("Failed to load .env from %s: %v", envPath, err)
+		} else {
+			log.Println("Loaded .env from:", envPath)
+		}
+	}
+
+	Cfg = LoadCfg()
+	CfgTest = LoadCfgTest()
 }
 
 func LoadCfg() Config {
@@ -34,7 +54,7 @@ func LoadCfg() Config {
 	rpcUrl := os.Getenv("RPC_URL")
 	apiKey := os.Getenv("API_KEY")
 	if pgPort == "" || pgHost == "" || pgUser == "" || pgPwd == "" || pgDB == "" || rpcUrl == "" || apiKey == "" {
-		log.Fatal("Required environment variables DATABASE_URL, RPC_URL, and API_KEY are not set")
+		log.Fatal("One or more required environment variables are missing (check POSTGRES_*, TEST_POSTGRES_*, RPC_URL, API_KEY)")
 	}
 	dbUrl := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		pgUser,
@@ -49,6 +69,7 @@ func LoadCfg() Config {
 		DBUrl:  dbUrl,
 		RPCUrl: rpcUrl,
 		APIKEY: apiKey,
+		DBName: pgDB,
 	}
 }
 
@@ -61,7 +82,7 @@ func LoadCfgTest() Config {
 	rpcUrl := os.Getenv("RPC_URL")
 	apiKey := os.Getenv("API_KEY")
 	if pgPort == "" || pgHost == "" || pgUser == "" || pgPwd == "" || pgDB == "" || rpcUrl == "" || apiKey == "" {
-		log.Fatal("Required environment variables DATABASE_URL, RPC_URL, and API_KEY are not set")
+		log.Fatal("One or more required environment variables are missing (check POSTGRES_*, TEST_POSTGRES_*, RPC_URL, API_KEY)")
 	}
 	dbUrl := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		pgUser,
@@ -85,4 +106,24 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func findEnvPath() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Fatal("Failed to get working directory:", err)
+	}
+
+	for {
+		envPath := filepath.Join(dir, ".env")
+		if _, err := os.Stat(envPath); err == nil {
+			return envPath
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break // reached root
+		}
+		dir = parent
+	}
+	return ""
 }

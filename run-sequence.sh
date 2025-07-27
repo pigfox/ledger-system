@@ -7,6 +7,7 @@ if [[ ! -f .env ]]; then
 fi
 
 set -x
+set -e
 clear
 echo "Running all API calls"
 
@@ -34,6 +35,9 @@ curl -X POST "${API_URL}/api/v1/transactions/transfer" "${HEADERS[@]}" -d '{"fro
 
 # Get user balances
 curl "${API_URL}/api/v1/users/1/balances" "${HEADERS[@]}"
+curl "${API_URL}/api/v1/users/1/balances?currency=ETH" "${HEADERS[@]}"
+curl "${API_URL}/api/v1/users/1/balances?currency=MATIC" "${HEADERS[@]}"
+curl "${API_URL}/api/v1/users/1/balances?currency=USDC" "${HEADERS[@]}"
 
 # Add addresses (adjust if your schema needs more fields)
 curl -X POST "${API_URL}/api/v1/addresses" "${HEADERS[@]}" -d '{"user_id": 1, "chain": "ethereum","address": "0xdadb0d80178819f2319190d340ce9a924f783711"}'

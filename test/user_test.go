@@ -20,7 +20,6 @@ func setupRouter() *mux.Router {
 }
 
 func testCreateUsers(t *testing.T) {
-	truncateTables()
 	router := setupRouter()
 
 	users := []map[string]string{
@@ -55,8 +54,13 @@ func testAddUserAddresses(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v1/addresses", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", config.CfgTest.APIKEY)
+
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
+
+	//t.Logf("AddUserAddress status: %d", resp.Code)
+	//t.Logf("AddUserAddress response: %s", resp.Body.String())
+
 	assert.Equal(t, http.StatusCreated, resp.Code)
 }
 
