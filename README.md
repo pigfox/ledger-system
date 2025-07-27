@@ -37,10 +37,16 @@ Terminal 3
 # Cheat script to run all API calls in sequence
 Terminal 4
 ./run-sequence.sh
+#Run the /reconciliation endpoint
+
+# Add bad transaction to view reconcilliation logic
+./baddata.sh
+#Run the /reconciliation endpoint again
 ```
+
 See api.md for more details on the API.
 
-The following address have been tested:
+The following addresses have been tested:
 https://etherscan.io/address/0xdadb0d80178819f2319190d340ce9a924f783711
 https://etherscan.io/address/0x0013d9bb14d37654cdacb0a00209c6994511afa1
 
@@ -53,6 +59,8 @@ https://etherscan.io/address/0x0013d9bb14d37654cdacb0a00209c6994511afa1
 
 
 To view raw data in the database, you can use the following commands:
+Note, the test DB is running on port 55432, while the main DB is on port 5432.
+Also the test DB is created and dropped on every test run, while the main DB is persistent.
 
 ```bash
 # psql "postgres://test_xyz:test_xyzpass@localhost:55432/test_xyzledger"

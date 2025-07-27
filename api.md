@@ -1,31 +1,25 @@
-# Ledger System API Documentation
+# 📘 Ledger System API Documentation
 
-All API endpoints (except `/health`) are prefixed with `/api/v1` and require an API key via the `X-API-Key` header.
+All endpoints (except `/health`) require an `X-API-Key` header. JSON body requests must also set `Content-Type: application/json`.
 
----
-
-## 🔐 Authentication
-
-All requests (except `/health`) must include:
+## 🔐 Authentication Headers
 
 ```
 X-API-Key: your-api-key
+Content-Type: application/json
 ```
-
-Replace `your-api-key` with the value from your `.env` (`API_KEY=...`).
 
 ---
 
-## 🟢 Health Check
+## 🩺 Health
 
 ### `GET /health`
 
-- ✅ No API key required.
-- 🩺 Returns service status.
+- ✅ No API key required
+- 🔍 Returns service status
 
-#### Response
-
-```
+**Response:**
+```text
 OK
 ```
 
@@ -35,21 +29,17 @@ OK
 
 ### `POST /api/v1/users`
 
-- 🛡️ Requires `X-API-Key`
-- 🛡️ Requires `Content-Type: application/json`
-- 📄 Creates a new user
+- 📄 Create a new user
 
-#### Request
-
+**Request:**
 ```json
 {
-  "name": "Alice Ledger",
+  "name": "Alice",
   "email": "alice@example.com"
 }
 ```
 
-#### Response (201 Created)
-
+**Response:**
 ```json
 {
   "id": 1
@@ -58,26 +48,22 @@ OK
 
 ---
 
-## 💸 Transactions
+## 💰 Transactions
 
 ### `POST /api/v1/transactions/deposit`
 
-- 🛡️ Requires `X-API-Key`
-- 🛡️ Requires `Content-Type: application/json`
-- 💰 Deposit funds into a user account
+- 💸 Deposit funds into a user account
 
-#### Request
-
+**Request:**
 ```json
 {
   "user_id": 1,
-  "amount": 2.5,
+  "amount": 13.5,
   "currency": "ETH"
 }
 ```
 
-#### Response (201 Created)
-
+**Response:**
 ```json
 {
   "id": "uuid"
@@ -88,22 +74,18 @@ OK
 
 ### `POST /api/v1/transactions/withdraw`
 
-- 🛡️ Requires `X-API-Key`
-- 🛡️ Requires `Content-Type: application/json`
-- 💸 Withdraw funds from a user account
+- 🏧 Withdraw funds from a user account
 
-#### Request
-
+**Request:**
 ```json
 {
   "user_id": 1,
-  "amount": 1.0,
+  "amount": 2.5,
   "currency": "ETH"
 }
 ```
 
-#### Response (201 Created)
-
+**Response:**
 ```json
 {
   "id": "uuid"
@@ -114,23 +96,19 @@ OK
 
 ### `POST /api/v1/transactions/transfer`
 
-- 🛡️ Requires `X-API-Key`
-- 🛡️ Requires `Content-Type: application/json`
 - 🔁 Transfer funds between users
 
-#### Request
-
+**Request:**
 ```json
 {
   "from_user_id": 1,
   "to_user_id": 2,
-  "amount": 0.5,
-  "currency": "ETH"
+  "amount": 1.5,
+  "currency": "USDC"
 }
 ```
 
-#### Response (201 Created)
-
+**Response:**
 ```json
 {
   "id": "uuid"
@@ -139,55 +117,65 @@ OK
 
 ---
 
+## 📊 Balances
+
 ### `GET /api/v1/users/{userId}/balances`
-### `GET /api/v1/users/{userId}/balances?currency=ETH`
 
-- 🛡️ Requires `X-API-Key`
-- 🛡️ Requires `Content-Type: application/json`
-- 📊 Get user balances, optionally filtered by currency
+- 🧾 Get all balances for a user
 
-#### Response
+**Example:**
+```
+GET /api/v1/users/1/balances
+```
 
+**Response:**
 ```json
 [
   {
     "currency": "ETH",
-    "balance": 1.5
+    "balance": 10.5
   },
   {
     "currency": "USDC",
-    "balance": 100.0
+    "balance": 7.0
   }
 ]
 ```
 
 ---
 
-## ⛓️ Blockchain Integration Endpoints
+### `GET /api/v1/users/{userId}/balances?currency=ETH`
+
+- 📈 Get balance for a specific currency
+
+**Example:**
+```
+GET /api/v1/users/1/balances?currency=ETH
+```
+
+---
+
+## ⛓️ Blockchain Addresses
 
 ### `POST /api/v1/addresses`
 
-- 🛡️ Requires `X-API-Key`
-- 🛡️ Requires `Content-Type: application/json`
-- 🔗 Register a blockchain address to monitor
+- 🔗 Register a blockchain address
 
-#### Request
-
+**Request:**
 ```json
 {
   "user_id": 1,
   "chain": "ethereum",
-  "address": "0xabc123..."
+  "address": "0xdadb0d80178819f2319190d340ce9a924f783711"
 }
 ```
 
-#### Response (201 Created)
-
+**Response:**
 ```json
 {
   "user_id": 1,
   "chain": "ethereum",
-  "address": "0xabc123..."
+  "address": "0xdadb0d80178819f2319190d340ce9a924f783711"
 }
 ```
 
@@ -195,44 +183,40 @@ OK
 
 ### `GET /api/v1/addresses/{address}/transactions`
 
-- 🛡️ Requires `X-API-Key`
-- 🛡️ Requires `Content-Type: application/json`
-- 📜 Get on-chain transactions for a registered address
+- 📜 Get on-chain transactions for an address
 
-#### Response
+**Example:**
+```
+GET /api/v1/addresses/0xdadb0.../transactions
+```
 
+**Response:**
 ```json
 [
   {
     "id": "uuid",
-    "address": "0xabc123...",
-    "tx_hash": "0xdef456...",
-    "amount": 1.2,
+    "tx_hash": "0x...",
+    "amount": 3.4,
     "currency": "ETH",
     "direction": "credit",
-    "block_height": 22961998,
-    "confirmed": true,
-    "created_at": "2025-07-20T00:00:00Z"
+    "block_height": 123456,
+    "created_at": "2025-07-26T00:00:00Z"
   }
 ]
 ```
 
 ---
 
-### `GET /api/v1/addresses/{address}/balance`
+### `GET /api/v1/addresses/{address}/balances`
 
-- 🛡️ Requires `X-API-Key`
-- 🛡️ Requires `Content-Type: application/json`
-- 📈 Get on-chain balance for a registered address
+- 📦 Get current on-chain balances for an address
 
-#### Response
-
+**Response:**
 ```json
 {
-  "address": "0xabc123...",
-  "currency": "ETH",
-  "balance": 4.3,
-  "last_updated": "2025-07-20T00:00:00Z"
+  "ETH": 3.2,
+  "USDC": 7.1,
+  "MATIC": 0.4
 }
 ```
 
@@ -242,35 +226,14 @@ OK
 
 ### `POST /api/v1/reconciliation`
 
-- 🛡️ Requires `X-API-Key`
-- 🛡️ Requires `Content-Type: application/json`
-- 🔄 Reconcile on-chain balances with ledger entries
+- 🔄 Reconcile on-chain and ledger entries
 
-#### Response
-
+**Response:**
 ```json
 {
-  "status": "ok",
-  "reconciled_entries": 5
+  "Matched": 1,
+  "Flagged": 0,
+  "Errors": [],
+  "Incompatible": []
 }
 ```
-
----
-
-## 🧪 Sample API Request with Curl
-
-```sh
-curl -X POST http://localhost:8080/api/v1/users \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: your-api-key" \
-  -d '{"name":"Alice","email":"alice@example.com"}'
-```
-
----
-
-## 🧩 Notes
-
-- UUIDs are generated by the server.
-- Ensure user addresses are stored before on-chain matching can occur.
-- Timestamps are in RFC3339 UTC format.
-- Currency values are floats (ETH, USDC, etc.).
